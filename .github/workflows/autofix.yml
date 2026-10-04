@@ -1,0 +1,76 @@
+# Copy this file into a target repository (next to a workflow named "CI").
+# It runs autofix-agent whenever CI fails on a non-autofix branch.
+name: autofix
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write        # push autofix/* branches
+  pull-requests: write   # open the PR
+  actions: read
+
+# One run per branch at a time, so two failures on the same branch don't race to push.
+concurrency:
+  group: autofix-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  autofix:
+    # Loop guard (also enforced in code): never react to failures on our own branches.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      !startsWith(github.event.workflow_run.head_branch, 'autofix/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 50
+          # Keep the token out of .git/config, where the model could read it.
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Claude Code CLI
+        run: npm i -g @anthropic-ai/claude-code
+
+      - name: Install autofix-agent and project dependencies
+        # The agent is vendored in .autofix/. Alternative for a public agent repo:
+        #   pip install "autofix-agent @ git+https://github.com/<owner>/autofix-agent"
+        run: |
+          pip install -e ./.autofix
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Let git push with the workflow token
+        run: gh auth setup-git
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Run autofix-agent
+        run: python -m autofix run
+        env:
+          # Set ONE of these as a repository secret.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          BASE_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUNS_DIR: ${{ runner.temp }}/autofix-runs
+
+      - name: Upload run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autofix-run-${{ github.run_id }}
+          path: ${{ runner.temp }}/autofix-runs/
+          if-no-files-found: ignore

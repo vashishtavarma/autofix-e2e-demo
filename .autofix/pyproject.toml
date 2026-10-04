@@ -1,0 +1,22 @@
+[project]
+name = "autofix-agent"
+version = "0.1.0"
+description = "Agent that fixes failing tests after a CI failure and opens a PR"
+requires-python = ">=3.12"
+dependencies = [
+    "claude-agent-sdk>=0.2",
+    "pydantic>=2.7",
+    "pytest>=8",
+]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["autofix", "autofix.steps"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# examples/ hold fixture repos with *intentionally* failing tests.
+norecursedirs = ["examples", ".venv", "runs"]
