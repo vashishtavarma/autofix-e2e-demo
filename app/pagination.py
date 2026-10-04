@@ -13,5 +13,5 @@ def page_slice(items: list, page: int, page_size: int) -> list:
     if page < 1:
         raise ValueError("page is 1-indexed")
     start = (page - 1) * page_size
-    end = start + page_size - 1  # last index on this page
+    end = start + page_size  # exclusive end index for this page
     return items[start:end]
