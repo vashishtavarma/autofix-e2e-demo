@@ -8,7 +8,7 @@ def parse_duration(text: str) -> int:
     total, num, seen = 0, "", False
     for ch in text.strip().lower():
         if ch.isdigit():
-            num = ch
+            num += ch
         elif ch in UNITS and num:
             total += int(num) * UNITS[ch]
             num, seen = "", True
